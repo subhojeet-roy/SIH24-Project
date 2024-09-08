@@ -1,0 +1,6 @@
+fine-tuned-bert/
+results/
+*.safetensors
+*.bin
+*.pt
+*.pth

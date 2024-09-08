@@ -1,31 +1,46 @@
-import streamlit as st
-from transformers import pipeline
+from transformers import BertTokenizerFast, BertForQuestionAnswering
+import torch
 
-# Load the pre-trained question-answering model
-qa_pipeline = pipeline('question-answering', model='distilbert-base-uncased-distilled-squad')
+# Load the fine-tuned model and tokenizer from Hugging Face
+tokenizer = BertTokenizerFast.from_pretrained('subhojeet-roy/SIH-Chatbot')
+model = BertForQuestionAnswering.from_pretrained('subhojeet-roy/SIH-Chatbot')
 
-# Expanded context related to university admissions
-context = """
-The admission process for engineering and polytechnic colleges in Rajasthan involves an entrance exam and an online application form. 
-The application deadline is typically in June. Scholarships are available for students from economically weaker sections and for meritorious students.
+# Ensure the model is on GPU if available
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
 
-Fee Structure:
-- The tuition fee for government engineering colleges is INR 50,000 per year.
-- For private engineering colleges, the fee ranges between INR 80,000 to 1.5 Lakhs per year.
+# Function to answer questions
+def answer_question(question, context):
+    inputs = tokenizer(question, context, return_tensors='pt', max_length=512, truncation=True)
+    inputs = {key: val.to(device) for key, val in inputs.items()}  # Move input tensors to GPU
 
-Scholarship Information:
-- Scholarships are available based on merit and for students from economically weaker sections.
-- The amount of scholarships ranges from INR 10,000 to full tuition fee waivers depending on the student's eligibility.
+    with torch.no_grad():
+        outputs = model(**inputs)
 
-Previous Year's Allotments:
-- In the previous year, students with a minimum score of 85% in their entrance exams were allotted seats in top government colleges.
-"""
+    # Get the most likely start and end of the answer within the context
+    answer_start = torch.argmax(outputs.start_logits)
+    answer_end = torch.argmax(outputs.end_logits) + 1
 
-# Streamlit interface
-st.title("University Admission Chatbot")
-user_input = st.text_input("Ask your admission-related question:")
+    # Convert token indices to the actual answer string
+    answer = tokenizer.convert_tokens_to_string(
+        tokenizer.convert_ids_to_tokens(inputs['input_ids'][0][answer_start:answer_end])
+    )
+    return answer
 
-if user_input:
-    # Get the answer from the model
-    result = qa_pipeline({'question': user_input, 'context': context})
-    st.write("Answer:", result['answer'])
+# Example chatbot function that uses the fine-tuned model to respond
+def chatbot_response(user_input):
+    # Example context, you can modify this based on how you manage data in your chatbot
+    context = "The average fee for National Institute of Technology Rourkela is 350600.0."
+    
+    # Get the model's answer
+    answer = answer_question(user_input, context)
+    
+    # Return the answer
+    return answer
+
+# Example usage of the chatbot
+if __name__ == '__main__':
+    # Simulate a user question
+    user_input = input("Ask a question: ")
+    response = chatbot_response(user_input)
+    print(f"Chatbot response: {response}")
